@@ -1,0 +1,8 @@
+spring.application.name: agent-orchestrator-mcp
+server.port: ${SERVER_PORT:9999}
+management.endpoints.web.exposure.include: health
+spring.ai.mcp.server:
+  protocol: ${MCP_PROTOCOL:STATELESS}
+  name: agent-orchestrator-mcp
+  version: 1.0.0
+mcp.banner.format: ${MCP_BANNER_FORMAT:JSON}
