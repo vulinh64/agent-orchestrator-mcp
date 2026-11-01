@@ -52,7 +52,7 @@ class McpServerTest {
           post(
               client,
               """
-					{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"register","arguments":{"requestId":"http-test","preferredName":"backend","role":"API"}}}
+					{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"register","arguments":{"requestId":"5b609ac7-12a0-4e95-9f0e-f0f1b2d61671","preferredName":"backend","role":"API"}}}
 					""");
       assertFalse(registered.contains("\"isError\":true"), registered);
       assertTrue(registered.contains("backend"), registered);
@@ -107,6 +107,22 @@ class McpServerTest {
 					{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"poll_question","arguments":{"agentId":"00000000-0000-0000-0000-000000000000"}}}
 					""");
       assertTrue(error.contains("\"isError\":true"), error);
+    }
+  }
+
+  @Test
+  void rejectsMalformedRegistrationRequestIdOverHttp() throws Exception {
+    try (var client = HttpClient.newHttpClient()) {
+      var response =
+          mapper.readTree(
+              post(
+                  client,
+                  """
+          {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"register","arguments":{"requestId":"not-a-uuid","preferredName":"invalid","role":"test"}}}
+          """));
+      assertTrue(
+          response.has("error") || response.path("result").path("isError").booleanValue(),
+          response.toString());
     }
   }
 

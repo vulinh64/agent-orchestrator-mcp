@@ -8,7 +8,7 @@ import lombok.With;
 
 @Builder
 @With
-public record Agent(UUID id, String name, String role) {
+public record Agent(UUID id, String name, String role, Instant lastActivity) {
 
   public Agent {
     name = TextUtils.normalizeText(name);

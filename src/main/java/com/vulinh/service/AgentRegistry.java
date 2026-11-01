@@ -23,11 +23,14 @@ public class AgentRegistry {
 
   // Guarded by agentsLock.
   private final Map<UUID, Agent> agents = new LinkedHashMap<>();
-  private final Map<String, Agent> registrations = new LinkedHashMap<>();
+  private final Map<UUID, UUID> registrations = new LinkedHashMap<>();
 
   @Locked.Write("agentsLock")
-  public Agent register(String requestId, String preferredName, String role) {
-    validate(requestId, "requestId", 128);
+  public Agent register(UUID requestId, String preferredName, String role) {
+    if (requestId == null) {
+      throw new IllegalArgumentException("requestId must be a UUID");
+    }
+
     validate(preferredName, "preferredName", 64);
     validate(role, "role", 1024);
 
@@ -44,7 +47,9 @@ public class AgentRegistry {
           "preferredName must contain only letters, digits, underscores or hyphens");
     }
 
-    var existing = registrations.get(requestId);
+    var existingId = registrations.get(requestId);
+
+    var existing = existingId == null ? null : agents.get(existingId);
 
     if (existing != null) {
       if (!existing.role().equals(normalizedRole)
@@ -54,7 +59,9 @@ public class AgentRegistry {
             "requestId already used with different registration data");
       }
 
-      return existing;
+      recordActivity(existing.id());
+
+      return agents.get(existing.id());
     }
 
     checkCapacity(agents.size(), MAX_AGENTS, "Agent");
@@ -65,10 +72,17 @@ public class AgentRegistry {
       name = "%s~%d".formatted(normalizedName, suffix);
     }
 
-    var agent = Agent.builder().id(UUID.randomUUID()).name(name).role(normalizedRole).build();
+    var agent =
+        Agent.builder()
+            .id(UUID.randomUUID())
+            .name(name)
+            .role(normalizedRole)
+            .lastActivity(Instant.now())
+            .build();
 
     agents.put(agent.id(), agent);
-    registrations.put(requestId, agent);
+
+    registrations.put(requestId, agent.id());
 
     return agent;
   }
@@ -78,15 +92,51 @@ public class AgentRegistry {
     return List.copyOf(agents.values());
   }
 
-  // Caller holds agentsLock for writing.
-  private boolean nameExists(String name) {
-    return agents.values().stream().anyMatch(agent -> agent.name().equals(name));
+  @Locked.Write("agentsLock")
+  public Set<UUID> evictIdleAgents() {
+    var cutoff = Instant.now().minus(Duration.ofMinutes(10));
+
+    var evicted = new HashSet<UUID>();
+
+    agents
+        .values()
+        .removeIf(agent -> {
+          if (agent.lastActivity().isAfter(cutoff)) {
+            return false;
+          }
+
+          evicted.add(agent.id());
+
+          return true;
+        });
+
+    registrations.values().removeIf(evicted::contains);
+
+    return Set.copyOf(evicted);
+  }
+
+  @Locked.Write("agentsLock")
+  public void recordActivity(UUID id) {
+    requireAgent(id);
+
+    var instant = Instant.now();
+
+    var agent = agents.get(id);
+
+    if (instant.isAfter(agent.lastActivity())) {
+      agents.put(id, agent.withLastActivity(instant));
+    }
   }
 
   @Locked.Read("agentsLock")
-  void requireAgent(UUID id) {
+  public void requireAgent(UUID id) {
     if (id == null || !agents.containsKey(id)) {
       throw new IllegalArgumentException("Unknown agent: %s".formatted(id));
     }
+  }
+
+  // Caller holds agentsLock for writing.
+  private boolean nameExists(String name) {
+    return agents.values().stream().anyMatch(agent -> agent.name().equals(name));
   }
 }
