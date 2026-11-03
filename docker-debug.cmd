@@ -29,5 +29,5 @@ docker build --tag "%IMAGE%" .
 if errorlevel 1 exit /b 1
 
 rem Run attached so application logs and Ctrl+C are available.
-docker run --rm --init --name "%CONTAINER%" --publish "%HOST_PORT%:9999" --env SERVER_PORT=9999 "%IMAGE%" %*
+docker run --detach --name "%CONTAINER%" --publish "%HOST_PORT%:9999" --env SERVER_PORT=9999 "%IMAGE%" %*
 exit /b %errorlevel%

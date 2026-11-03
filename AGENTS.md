@@ -24,9 +24,9 @@
 
 ## Retention and eviction
 
-* Limits are 256 agents, 8912 questions, and 8912 answers. Creating an entry above its limit fails without changing state. Questions and answers accept up to 32768 Java characters. Scheduled cleanup runs every 30 seconds.
+* Limits are 256 agents, 8912 questions, and 8912 answers. Creating an entry above its limit fails without changing state. Questions and answers accept up to 32768 Java characters. Question cleanup and agent eviction run every 30 seconds. Their expiration and idle thresholds are configured by `mcp.eviction.question-timeout` (`MCP_EVICTION_QUESTION_TIMEOUT`) and `mcp.eviction.agent-idle-timeout` (`MCP_EVICTION_AGENT_IDLE_TIMEOUT`), e.g. `10m` or `30s`. `McpEvictionProperties` binds `mcp.eviction`; its compact constructor defaults both timeouts to 10 minutes and enabled to true. Set `mcp.eviction.enabled=false` (`MCP_EVICTION_ENABLED=false`) to prevent the `CoordinationEviction` scheduled bean from being created. Disabling cleanup does not disable question expiration checks; expired entries remain retained until manual cleanup or restart.
 
-* Agents idle for at least 10 minutes are evicted together with their registration request IDs, freeing names and capacity.
+* Agents idle for at least the configured agent idle timeout (default 10 minutes) are evicted together with their registration request IDs, freeing names and capacity.
 
 * Registration retries and calls with a valid caller UUID to ask, answer, or poll refresh activity (including calls that subsequently fail validation). Listing agents and receiving messages do not refresh activity. Polls keep shared conversation read locks.
 
@@ -34,7 +34,7 @@
 
 * Agent activity updates and eviction use the agent write lock; validation and listing use the agent read lock. Agent responses include lastActivity.
 
-* Unanswered questions expire 10 minutes after creation, independently of polling or retries, and are removed only by scheduled cleanup. Expired question IDs produce the same error as unknown IDs, even before cleanup.
+* Unanswered questions expire after the configured question timeout (default 10 minutes) from creation, independently of polling or retries, and are removed only by scheduled cleanup. Expired question IDs produce the same error as unknown IDs, even before cleanup.
 
 * Their request IDs may be reused for new questions after scheduled removal. Until removal, retries fail as unknown questions and expired entries count toward capacity. Answered questions and answers remain until restart or participant eviction. Agent eviction removes every question where the evicted agent is sender or recipient, together with answers and expiration metadata.
 
@@ -205,5 +205,7 @@
 * The Docker build skips tests, so it is not a substitute for running tests separately once tests exist.
 
 * For script changes, validate shell syntax (`sh -n docker-debug.sh`) and check both scripts retain equivalent behavior. Run `git diff --check` before finishing. Avoid modifying unrelated files or overwriting work already in progress.
+
+* After completing edits and before posting the final sign-off, explicitly run the Spotify fmt plugin: `./mvnw.cmd fmt:format` on Windows or `sh mvnw fmt:format` on POSIX.
 
 * Update this document when the setup or implemented capabilities change.

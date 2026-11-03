@@ -11,8 +11,10 @@ import org.junit.jupiter.api.Test;
 
 class CoordinationServiceTest {
 
-  private final AgentRegistry registry = new AgentRegistry();
-  private final ConversationService conversations = new ConversationService(registry);
+  private final AgentRegistry registry =
+      new AgentRegistry(com.vulinh.config.McpEvictionProperties.builder().build());
+  private final ConversationService conversations =
+      new ConversationService(com.vulinh.config.McpEvictionProperties.builder().build(), registry);
 
   @Test
   void concurrentQuestionRetriesAndAnswersRemainAtomic() throws Exception {
@@ -31,10 +33,13 @@ class CoordinationServiceTest {
     try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
       List<Callable<UUID>> asks =
           IntStream.range(0, 100)
-              .mapToObj(_ ->
-                  (Callable<UUID>)
-                      () ->
-                          conversations.askQuestion(sender, recipient, requestId, "contract?").id())
+              .mapToObj(
+                  _ ->
+                      (Callable<UUID>)
+                          () ->
+                              conversations
+                                  .askQuestion(sender, recipient, requestId, "contract?")
+                                  .id())
               .toList();
 
       var ids = new HashSet<UUID>();
@@ -49,21 +54,23 @@ class CoordinationServiceTest {
 
       List<Callable<Boolean>> answers =
           IntStream.range(0, 100)
-              .mapToObj(index ->
-                  (Callable<Boolean>)
-                      () -> {
-                        try {
-                          conversations.answerQuestion(
-                              recipient, questionId, "answer %d".formatted(index));
+              .mapToObj(
+                  index ->
+                      (Callable<Boolean>)
+                          () -> {
+                            try {
+                              conversations.answerQuestion(
+                                  recipient, questionId, "answer %d".formatted(index));
 
-                          return true;
-                        } catch (IllegalArgumentException exception) {
-                          assertEquals(
-                              "Question already has a different answer", exception.getMessage());
+                              return true;
+                            } catch (IllegalArgumentException exception) {
+                              assertEquals(
+                                  "Question already has a different answer",
+                                  exception.getMessage());
 
-                          return false;
-                        }
-                      })
+                              return false;
+                            }
+                          })
               .toList();
 
       int accepted = 0;
@@ -93,29 +100,30 @@ class CoordinationServiceTest {
     try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
       List<Callable<Void>> tasks =
           IntStream.range(0, 128)
-              .mapToObj(index ->
-                  (Callable<Void>)
-                      () -> {
-                        registry.register(UUID.randomUUID(), "agent", "role");
+              .mapToObj(
+                  index ->
+                      (Callable<Void>)
+                          () -> {
+                            registry.register(UUID.randomUUID(), "agent", "role");
 
-                        assertFalse(registry.listAgents().isEmpty());
+                            assertFalse(registry.listAgents().isEmpty());
 
-                        var question =
-                            conversations.askQuestion(
-                                sender, recipient, new UUID(0, index), "contract?");
+                            var question =
+                                conversations.askQuestion(
+                                    sender, recipient, new UUID(0, index), "contract?");
 
-                        conversations.pollQuestion(recipient);
+                            conversations.pollQuestion(recipient);
 
-                        assertTrue(conversations.pollAnswer(sender, question.id()).isEmpty());
+                            assertTrue(conversations.pollAnswer(sender, question.id()).isEmpty());
 
-                        var answer =
-                            conversations.answerQuestion(recipient, question.id(), "contract");
+                            var answer =
+                                conversations.answerQuestion(recipient, question.id(), "contract");
 
-                        assertEquals(
-                            List.of(answer), conversations.pollAnswer(sender, question.id()));
+                            assertEquals(
+                                List.of(answer), conversations.pollAnswer(sender, question.id()));
 
-                        return null;
-                      })
+                            return null;
+                          })
               .toList();
 
       for (var result : executor.invokeAll(tasks)) {
@@ -288,17 +296,18 @@ class CoordinationServiceTest {
     try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
       List<Callable<Boolean>> tasks =
           IntStream.range(0, 300)
-              .mapToObj(index ->
-                  (Callable<Boolean>)
-                      () -> {
-                        try {
-                          registry.register(UUID.randomUUID(), "agent", "role");
+              .mapToObj(
+                  _ ->
+                      (Callable<Boolean>)
+                          () -> {
+                            try {
+                              registry.register(UUID.randomUUID(), "agent", "role");
 
-                          return true;
-                        } catch (IllegalStateException _) {
-                          return false;
-                        }
-                      })
+                              return true;
+                            } catch (IllegalStateException _) {
+                              return false;
+                            }
+                          })
               .toList();
 
       int successes = 0;

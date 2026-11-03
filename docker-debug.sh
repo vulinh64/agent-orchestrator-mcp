@@ -24,7 +24,7 @@ fi
 docker build --tag "$IMAGE" .
 
 # Run attached so application logs and Ctrl+C are available.
-exec docker run --rm --init \
+exec docker run --detach \
     --name "$CONTAINER" \
     --publish "$HOST_PORT:9999" \
     --env SERVER_PORT=9999 \

@@ -14,9 +14,10 @@ import org.mockito.MockedStatic;
 class CoordinationEvictionTest {
   private Instant current;
   private MockedStatic<Instant> instants;
-  private final AgentRegistry registry = new AgentRegistry();
-  private final ConversationService conversations = new ConversationService(registry);
-  private final CoordinationEviction eviction = new CoordinationEviction(conversations);
+  private final AgentRegistry registry =
+      new AgentRegistry(com.vulinh.config.McpEvictionProperties.builder().build());
+  private final ConversationService conversations =
+      new ConversationService(com.vulinh.config.McpEvictionProperties.builder().build(), registry);
 
   @BeforeEach
   void controlTime() {
@@ -35,14 +36,44 @@ class CoordinationEvictionTest {
   }
 
   @Test
+  void configuredTimeoutsControlExpirationIndependently() {
+    var properties =
+        com.vulinh.config.McpEvictionProperties.builder()
+            .questionTimeout(Duration.ofSeconds(45))
+            .agentIdleTimeout(Duration.ofMinutes(2))
+            .build();
+    var customRegistry = new AgentRegistry(properties);
+    var customConversations = new ConversationService(properties, customRegistry);
+    var sender = customRegistry.register(UUID.randomUUID(), "sender", "role");
+    var recipient = customRegistry.register(UUID.randomUUID(), "recipient", "role");
+    var question =
+        customConversations.askQuestion(sender.id(), recipient.id(), UUID.randomUUID(), "hello");
+    advance(Duration.ofSeconds(44));
+    assertEquals(1, customConversations.pollQuestion(recipient.id()).size());
+    advance(Duration.ofSeconds(1));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> customConversations.pollAnswer(sender.id(), question.id()));
+    customConversations.evictIdleAgents();
+    assertEquals(2, customRegistry.listAgents().size());
+    advance(Duration.ofSeconds(119));
+    customConversations.evictIdleAgents();
+    assertEquals(
+        List.of(sender.id()), customRegistry.listAgents().stream().map(Agent::id).toList());
+    advance(Duration.ofSeconds(1));
+    customConversations.evictIdleAgents();
+    assertTrue(customRegistry.listAgents().isEmpty());
+  }
+
+  @Test
   void evictsAtTenMinutesAndReleasesRegistrationAndName() {
     var original =
         registry.register(UUID.fromString("655a5f3f-eafc-52ee-8b83-70252c149cb1"), "agent", "role");
     advance(Duration.ofMinutes(10).minusMillis(1));
-    eviction.evictExpiredEntries();
+    conversations.evictExpiredEntries();
     assertEquals(List.of(original), registry.listAgents());
     advance(Duration.ofMillis(1));
-    eviction.evictExpiredEntries();
+    conversations.evictExpiredEntries();
     assertTrue(registry.listAgents().isEmpty());
     var replacement =
         registry.register(UUID.fromString("655a5f3f-eafc-52ee-8b83-70252c149cb1"), "agent", "role");
@@ -64,15 +95,13 @@ class CoordinationEvictionTest {
         conversations.askQuestion(sender.id(), recipient.id(), UUID.randomUUID(), "hello");
     advance(Duration.ofMinutes(1));
     conversations.pollAnswer(sender.id(), question.id());
-    eviction.evictExpiredEntries();
-    assertEquals(
-        List.of(sender.id()), registry.listAgents().stream().map(Agent::id).toList());
+    conversations.evictExpiredEntries();
+    assertEquals(List.of(sender.id()), registry.listAgents().stream().map(Agent::id).toList());
     assertEquals(current, registry.listAgents().getFirst().lastActivity());
     advance(Duration.ofMinutes(9));
     conversations.pollQuestion(sender.id());
-    eviction.evictExpiredEntries();
-    assertEquals(
-        List.of(sender.id()), registry.listAgents().stream().map(Agent::id).toList());
+    conversations.evictExpiredEntries();
+    assertEquals(List.of(sender.id()), registry.listAgents().stream().map(Agent::id).toList());
     assertEquals(current, registry.listAgents().getFirst().lastActivity());
   }
 
@@ -92,7 +121,7 @@ class CoordinationEvictionTest {
     var retainedPending =
         conversations.askQuestion(active, active, UUID.randomUUID(), "still pending");
     advance(Duration.ofMinutes(1));
-    eviction.evictExpiredEntries();
+    conversations.evictExpiredEntries();
     assertEquals(List.of(active), registry.listAgents().stream().map(Agent::id).toList());
     assertEquals(List.of(retainedPending), conversations.pollQuestion(active));
     for (var removed : List.of(incoming, outgoing, pending)) {
@@ -104,7 +133,7 @@ class CoordinationEvictionTest {
     assertEquals(
         "retained answer", conversations.pollAnswer(active, retained.id()).getFirst().text());
     assertNotNull(conversations.askQuestion(active, active, pendingRequest, "new recipient"));
-    eviction.evictExpiredEntries();
+    conversations.evictExpiredEntries();
     assertEquals(
         "retained answer", conversations.pollAnswer(active, retained.id()).getFirst().text());
   }
@@ -133,7 +162,7 @@ class CoordinationEvictionTest {
             .orElseThrow());
     conversations.answerQuestion(recipient.id(), question.id(), "hi");
     advance(Duration.ofMinutes(1));
-    eviction.evictExpiredEntries();
+    conversations.evictExpiredEntries();
     assertEquals(2, registry.listAgents().size());
     assertEquals("hi", conversations.pollAnswer(sender.id(), question.id()).getFirst().text());
   }
@@ -163,7 +192,7 @@ class CoordinationEvictionTest {
     assertThrows(
         IllegalArgumentException.class,
         () -> conversations.answerQuestion(recipient, question.id(), "late"));
-    eviction.evictExpiredEntries();
+    conversations.evictExpiredEntries();
     assertNotEquals(
         question.id(), conversations.askQuestion(sender, recipient, request, "hello").id());
   }
@@ -192,7 +221,7 @@ class CoordinationEvictionTest {
     assertThrows(
         IllegalStateException.class,
         () -> conversations.askQuestion(sender, recipient, UUID.randomUUID(), "await cleanup"));
-    eviction.evictExpiredEntries();
+    conversations.evictExpiredEntries();
     assertEquals("saved", conversations.pollAnswer(sender, answered.id()).getFirst().text());
     assertNotNull(conversations.askQuestion(sender, recipient, UUID.randomUUID(), "space"));
   }

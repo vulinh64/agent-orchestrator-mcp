@@ -5,6 +5,7 @@ import static com.vulinh.service.CoordinationValidation.validate;
 
 import module java.base;
 
+import com.vulinh.config.McpEvictionProperties;
 import com.vulinh.data.Answer;
 import com.vulinh.data.Question;
 import lombok.Locked;
@@ -15,6 +16,8 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class ConversationService {
+
+  private final McpEvictionProperties evictionProperties;
 
   private static final int MAX_ENTRIES = 8912;
   private static final int MAX_TEXT_LENGTH = 32768;
@@ -107,10 +110,11 @@ public class ConversationService {
     agentRegistry.recordActivity(agentId);
 
     return questions.values().stream()
-        .filter(question ->
-            !isExpired(question.id())
-                && question.to().equals(agentId)
-                && !answers.containsKey(question.id()))
+        .filter(
+            question ->
+                !isExpired(question.id())
+                    && question.to().equals(agentId)
+                    && !answers.containsKey(question.id()))
         .toList();
   }
 
@@ -138,7 +142,11 @@ public class ConversationService {
   @Locked.Write("conversationsLock")
   public void evictExpiredEntries() {
     invalidateUnansweredQuestions();
+    evictIdleAgents();
+  }
 
+  @Locked.Write("conversationsLock")
+  public void evictIdleAgents() {
     var evicted = agentRegistry.evictIdleAgents();
 
     questions
@@ -162,6 +170,9 @@ public class ConversationService {
 
   private boolean isExpired(UUID id) {
     return !answers.containsKey(id)
-        && !questionCreatedAt.get(id).plus(Duration.ofMinutes(10)).isAfter(Instant.now());
+        && !questionCreatedAt
+            .get(id)
+            .plus(evictionProperties.questionTimeout())
+            .isAfter(Instant.now());
   }
 }

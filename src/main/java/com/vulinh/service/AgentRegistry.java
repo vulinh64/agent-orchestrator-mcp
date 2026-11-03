@@ -5,14 +5,19 @@ import static com.vulinh.service.CoordinationValidation.validate;
 
 import module java.base;
 
+import com.vulinh.config.McpEvictionProperties;
 import com.vulinh.data.Agent;
 import lombok.Locked;
+import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
 /** Owns agent registration state. Never acquires the conversation lock. */
 @Service
+@RequiredArgsConstructor
 public class AgentRegistry {
+
+  private final McpEvictionProperties evictionProperties;
 
   private static final int MAX_AGENTS = 256;
   private static final char[] ALLOWED_NAME_CHARACTERS =
@@ -94,21 +99,22 @@ public class AgentRegistry {
 
   @Locked.Write("agentsLock")
   public Set<UUID> evictIdleAgents() {
-    var cutoff = Instant.now().minus(Duration.ofMinutes(10));
+    var cutoff = Instant.now().minus(evictionProperties.agentIdleTimeout());
 
     var evicted = new HashSet<UUID>();
 
     agents
         .values()
-        .removeIf(agent -> {
-          if (agent.lastActivity().isAfter(cutoff)) {
-            return false;
-          }
+        .removeIf(
+            agent -> {
+              if (agent.lastActivity().isAfter(cutoff)) {
+                return false;
+              }
 
-          evicted.add(agent.id());
+              evicted.add(agent.id());
 
-          return true;
-        });
+              return true;
+            });
 
     registrations.values().removeIf(evicted::contains);
 

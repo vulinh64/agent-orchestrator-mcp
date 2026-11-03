@@ -6,3 +6,7 @@ spring.ai.mcp.server:
   name: agent-orchestrator-mcp
   version: 1.0.0
 mcp.banner.format: ${MCP_BANNER_FORMAT:JSON}
+mcp.eviction:
+  enabled: ${MCP_EVICTION_ENABLED:true}
+  question-timeout: ${MCP_EVICTION_QUESTION_TIMEOUT:10m}
+  agent-idle-timeout: ${MCP_EVICTION_AGENT_IDLE_TIMEOUT:10m}

@@ -23,7 +23,7 @@ public class AgentTools {
           @McpAnnotations(destructiveHint = false, idempotentHint = true, openWorldHint = false),
       name = "register",
       description =
-          "Register with a preferred name and role. Generate a UUID requestId and reuse it on retries; it is globally unique. Save the returned UUID id and unique name. Agents expire after 10 minutes without registration retries, sending, answering, or polling.")
+          "Register with a preferred name and role. Generate a UUID requestId and reuse it on retries; it is globally unique. Save the returned UUID id and unique name. Agents expire after the configured idle timeout (default 10 minutes) without registration retries, sending, answering, or polling.")
   public Agent register(UUID requestId, String preferredName, String role) {
     return agentRegistry.register(requestId, preferredName, role);
   }
@@ -46,7 +46,7 @@ public class AgentTools {
           @McpAnnotations(destructiveHint = false, idempotentHint = true, openWorldHint = false),
       name = "ask_question",
       description =
-          "Ask another registered agent UUID and return immediately with a question ID. Generate a UUID requestId for each new question and reuse it for retries; it is unique per sender. Unanswered questions expire after 10 minutes; polling and retries do not extend this deadline. Maximum text length is 32768 characters.")
+          "Ask another registered agent UUID and return immediately with a question ID. Generate a UUID requestId for each new question and reuse it for retries; it is unique per sender. Unanswered questions expire after the configured question timeout (default 10 minutes); polling and retries do not extend this deadline. Maximum text length is 32768 characters.")
   public Question askQuestion(UUID from, UUID to, UUID requestId, String text) {
     return conversationService.askQuestion(from, to, requestId, text);
   }
