@@ -37,3 +37,4 @@ build/
 ### AI
 .claude
 .codex
+.mcp.json
